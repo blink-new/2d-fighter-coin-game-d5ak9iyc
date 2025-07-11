@@ -7,7 +7,7 @@ import { Button } from './components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Badge } from './components/ui/badge'
-import { Swords, ShoppingCart, BarChart3, Play } from 'lucide-react'
+import { Swords, ShoppingCart, BarChart3, Play, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 function App() {
@@ -60,7 +60,12 @@ function App() {
     totalCoins: 0,
     upgradesPurchased: [],
     gamesWon: 0,
-    totalGames: 0
+    totalGames: 0,
+    shopStock: {
+      rage_mode: 3,
+      healing_potion: 5,
+      shield_barrier: 2
+    }
   })
 
   const [activeTab, setActiveTab] = useState<string>('game')
@@ -87,7 +92,16 @@ function App() {
     if (savedGameStats) {
       try {
         const parsedStats = JSON.parse(savedGameStats)
-        setGameStats(parsedStats)
+        setGameStats(prevStats => ({
+          ...prevStats,
+          ...parsedStats,
+          shopStock: parsedStats.shopStock || {
+            double_jump: 3,
+            shield: 2,
+            berserker: 1,
+            vampire: 2
+          }
+        }))
       } catch (e) {
         console.error('Error loading game stats:', e)
       }
@@ -173,21 +187,53 @@ function App() {
 
   // Handle shop purchases
   const handlePurchase = (item: ShopItem) => {
-    if (gameState.coins >= item.price && !gameStats.upgradesPurchased.some(upgrade => upgrade.id === item.id)) {
-      setGameState(prevState => ({
-        ...prevState,
-        coins: prevState.coins - item.price
-      }))
-      
-      setGameStats(prevStats => ({
-        ...prevStats,
-        upgradesPurchased: [...prevStats.upgradesPurchased, { ...item, purchased: true }]
-      }))
-      
-      toast.success(`Purchased ${item.name}! Your fighter is now stronger!`, {
-        duration: 3000,
-        icon: '🛒'
-      })
+    if (gameState.coins >= item.price) {
+      if (item.isLimited) {
+        // Handle limited stock items
+        const currentStock = gameStats.shopStock[item.id] || 0
+        if (currentStock > 0) {
+          setGameState(prevState => ({
+            ...prevState,
+            coins: prevState.coins - item.price
+          }))
+          
+          setGameStats(prevStats => ({
+            ...prevStats,
+            shopStock: {
+              ...prevStats.shopStock,
+              [item.id]: currentStock - 1
+            }
+          }))
+          
+          toast.success(`Purchased ${item.name}! You have ${currentStock - 1} remaining.`, {
+            duration: 3000,
+            icon: '✨'
+          })
+        } else {
+          toast.error('This item is out of stock!', {
+            duration: 3000,
+            icon: '❌'
+          })
+        }
+      } else {
+        // Handle permanent upgrades
+        if (!gameStats.upgradesPurchased.some(upgrade => upgrade.id === item.id)) {
+          setGameState(prevState => ({
+            ...prevState,
+            coins: prevState.coins - item.price
+          }))
+          
+          setGameStats(prevStats => ({
+            ...prevStats,
+            upgradesPurchased: [...prevStats.upgradesPurchased, { ...item, purchased: true }]
+          }))
+          
+          toast.success(`Purchased ${item.name}! Your fighter is now stronger!`, {
+            duration: 3000,
+            icon: '🛒'
+          })
+        }
+      }
     }
   }
 
@@ -220,6 +266,8 @@ function App() {
     }))
     setActiveTab('game')
   }
+
+  const hasLimitedAbilities = Object.values(gameStats.shopStock).some(stock => stock > 0)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
@@ -273,11 +321,18 @@ function App() {
             <TabsTrigger value="shop" className="flex items-center gap-2">
               <ShoppingCart className="w-4 h-4" />
               Shop
-              {gameState.coins >= 20 && (
-                <Badge variant="secondary" className="ml-1">
-                  {gameState.coins}
-                </Badge>
-              )}
+              <div className="flex gap-1">
+                {gameState.coins >= 20 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {gameState.coins}
+                  </Badge>
+                )}
+                {hasLimitedAbilities && (
+                  <Badge variant="default" className="bg-purple-500 text-white">
+                    <Sparkles className="w-3 h-3" />
+                  </Badge>
+                )}
+              </div>
             </TabsTrigger>
             <TabsTrigger value="stats" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />

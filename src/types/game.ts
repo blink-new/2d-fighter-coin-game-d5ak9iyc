@@ -15,6 +15,13 @@ export interface Fighter {
   damage: number
   color: string
   name: string
+  // New abilities
+  doubleJump: boolean
+  doubleJumpUsed: boolean
+  shieldActive: boolean
+  shieldCooldown: number
+  berserkerMode: boolean
+  berserkerTimer: number
 }
 
 export interface GameState {
@@ -33,10 +40,14 @@ export interface ShopItem {
   name: string
   description: string
   price: number
-  type: 'health' | 'damage' | 'speed'
+  type: 'health' | 'damage' | 'speed' | 'ability'
   value: number
   purchased: boolean
   icon: string
+  stock?: number
+  maxStock?: number
+  isLimited?: boolean
+  rarity?: 'common' | 'rare' | 'epic' | 'legendary'
 }
 
 export interface GameStats {
@@ -44,4 +55,13 @@ export interface GameStats {
   upgradesPurchased: ShopItem[]
   gamesWon: number
   totalGames: number
+  shopStock: Record<string, number>
+}
+
+export interface TouchInput {
+  left: boolean
+  right: boolean
+  jump: boolean
+  attack: boolean
+  shield: boolean
 }

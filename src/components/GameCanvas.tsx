@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Fighter, GameState } from '../types/game'
 import { useGameLoop } from '../hooks/useGameLoop'
+import { TouchControls } from './TouchControls'
 
 interface GameCanvasProps {
   gameState: GameState
@@ -10,12 +11,24 @@ interface GameCanvasProps {
 export function GameCanvas({ gameState, onGameStateChange }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [keys, setKeys] = useState<Set<string>>(new Set())
+  const [touchInputs, setTouchInputs] = useState<Set<string>>(new Set())
+  const [isMobile, setIsMobile] = useState(false)
 
   const CANVAS_WIDTH = 800
   const CANVAS_HEIGHT = 400
   const GROUND_Y = CANVAS_HEIGHT - 100
   const GRAVITY = 0.8
   const JUMP_FORCE = -15
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const createFighter = useCallback((x: number, color: string, name: string): Fighter => ({
     x,
@@ -78,30 +91,42 @@ export function GameCanvas({ gameState, onGameStateChange }: GameCanvasProps) {
   }, [])
 
   const handlePlayerInput = useCallback((player: Fighter) => {
-    if (keys.has('ArrowLeft') || keys.has('a')) {
+    // Keyboard input
+    const leftPressed = keys.has('ArrowLeft') || keys.has('a')
+    const rightPressed = keys.has('ArrowRight') || keys.has('d')
+    const upPressed = keys.has('ArrowUp') || keys.has('w')
+    const attackPressed = keys.has(' ') || keys.has('Enter')
+
+    // Touch input
+    const touchLeftPressed = touchInputs.has('left')
+    const touchRightPressed = touchInputs.has('right')
+    const touchUpPressed = touchInputs.has('jump')
+    const touchAttackPressed = touchInputs.has('attack')
+
+    if (leftPressed || touchLeftPressed) {
       player.x -= player.speed
       player.isMovingLeft = true
     } else {
       player.isMovingLeft = false
     }
 
-    if (keys.has('ArrowRight') || keys.has('d')) {
+    if (rightPressed || touchRightPressed) {
       player.x += player.speed
       player.isMovingRight = true
     } else {
       player.isMovingRight = false
     }
 
-    if ((keys.has('ArrowUp') || keys.has('w')) && !player.isJumping) {
+    if ((upPressed || touchUpPressed) && !player.isJumping) {
       player.velocityY = JUMP_FORCE
       player.isJumping = true
     }
 
-    if ((keys.has(' ') || keys.has('Enter')) && player.attackCooldown <= 0) {
+    if ((attackPressed || touchAttackPressed) && player.attackCooldown <= 0) {
       player.isAttacking = true
       player.attackCooldown = 500
     }
-  }, [keys])
+  }, [keys, touchInputs])
 
   const handleEnemyAI = useCallback((enemy: Fighter, player: Fighter) => {
     const distanceToPlayer = Math.abs(enemy.x - player.x)
@@ -246,7 +271,7 @@ export function GameCanvas({ gameState, onGameStateChange }: GameCanvasProps) {
     ctx.font = 'bold 24px Arial'
     ctx.textAlign = 'center'
     
-    if (!gameState.gameStarted) {
+    if (!gameState.gameStarted && !isMobile) {
       ctx.fillText('Press SPACE to Start!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2)
       ctx.font = '16px Arial'
       ctx.fillText('Use ARROW KEYS or WASD to move, SPACE to attack', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30)
@@ -265,16 +290,34 @@ export function GameCanvas({ gameState, onGameStateChange }: GameCanvasProps) {
         ctx.fillText(`+${10 + (gameState.level * 5)} Coins!`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 60)
       }
       
-      ctx.font = '18px Arial'
-      ctx.fillText('Press R to restart', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100)
+      if (!isMobile) {
+        ctx.font = '18px Arial'
+        ctx.fillText('Press R to restart', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100)
+      }
     }
-  }, [gameState, drawFighter])
+  }, [gameState, drawFighter, isMobile])
+
+  const handleTouchInput = useCallback((action: string, pressed: boolean) => {
+    if (pressed) {
+      setTouchInputs(prev => new Set(prev.add(action)))
+    } else {
+      setTouchInputs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(action)
+        return newSet
+      })
+    }
+  }, [])
+
+  const handleStart = useCallback(() => {
+    onGameStateChange({ ...gameState, gameStarted: true })
+  }, [gameState, onGameStateChange])
 
   useGameLoop(updateGame)
 
   useEffect(() => {
     draw()
-  }, [draw, gameState])
+  }, [draw])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -306,20 +349,42 @@ export function GameCanvas({ gameState, onGameStateChange }: GameCanvasProps) {
     }
   }, [gameState, onGameStateChange, resetGame])
 
+  const canvasStyle = isMobile ? {
+    width: '100%',
+    maxWidth: '400px',
+    height: 'auto',
+    imageRendering: 'pixelated' as const
+  } : {
+    imageRendering: 'pixelated' as const
+  }
+
   return (
-    <div className="flex flex-col items-center space-y-4">
+    <div className="relative flex flex-col items-center space-y-4">
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
-        className="border-2 border-gray-800 rounded-lg shadow-lg"
-        style={{ imageRendering: 'pixelated' }}
+        className="border-2 border-gray-800 rounded-lg shadow-lg bg-white"
+        style={canvasStyle}
       />
-      <div className="text-center">
-        <p className="text-sm text-gray-600">
-          Use ARROW KEYS or WASD to move • SPACE to attack • R to restart
-        </p>
-      </div>
+      
+      {!isMobile && (
+        <div className="text-center">
+          <p className="text-sm text-gray-600">
+            Use ARROW KEYS or WASD to move • SPACE to attack • R to restart
+          </p>
+        </div>
+      )}
+      
+      {isMobile && (
+        <TouchControls
+          onInput={handleTouchInput}
+          gameStarted={gameState.gameStarted}
+          gameOver={gameState.gameOver}
+          onStart={handleStart}
+          onRestart={resetGame}
+        />
+      )}
     </div>
   )
 }
